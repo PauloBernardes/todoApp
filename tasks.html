@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Vue To-Do App with Drag & Drop</title>
+    <link rel="icon" type="image/png" href="https://i9web.pt//images/android-chrome-192x192.png"/>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/css/bootstrap.min.css" integrity="sha512-Ez0cGzNzHR1tYAv56860NLspgUGuQw16GiOOp/I2LuTmpSK9xDXlgJz3XN4cnpXWDmkNBKXR/VDMTCnAaEooxA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #000000;
+            --card: #f2f2f2;
+            --accent: rgba(0, 100, 0, 0.79);
+        }
+
+        body.dark {
+            --bg: #121212;
+            --text: #f1f1f1;
+            --card: #1e1e1e;
+            --accent: #6bff66;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: Arial, sans-serif;
+            margin:0;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        #app {
+            max-width: 600px;
+            margin: 20px auto;
+            background: var(--card);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: rgba(0, 0, 0, 0.25) 0 25px 50px -12px;
+            transition: background 0.3s;
+        }
+
+        h2 { text-align: center; }
+
+        .task { display: flex; flex-direction: column; margin-bottom: 10px; border: 1px solid #ccc; padding: 10px; border-radius: 6px; background: var(--bg); }
+        .task.done .text { text-decoration: line-through; color: gray; }
+
+        .actions { display: flex; gap: 10px; margin-top: 5px; }
+        .task-header { display: flex; justify-content: space-between; align-items: center; }
+
+        input, select, button {
+            padding: 8px;
+            margin-top: 6px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            display:flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button.add-task { background: darkgreen; float: right; margin-top: 10px; width: auto; }
+        button.delete { background: darkred; }
+        button.edit { background: #0a5c80; }
+        button.secondary { display: inline-block; background: #636262; color:#fff; margin: 0 4px; width: auto;}
+
+        button.secondary.active {
+            background-color: var(--accent);
+            color: #fff;
+            font-weight: bold;
+            box-shadow: 0 0 5px var(--accent);
+        }
+
+
+        .filters {
+            display: block;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 10px 0;
+        }
+
+        .calendar-view {
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px solid var(--accent);
+        }
+
+        .calendar-list .calendar-date { margin: 5px 0; }
+        .calendar-list summary { cursor: pointer; font-weight: bold; }
+
+        @media (max-width: 600px) {
+            .task-header { flex-direction: column; align-items: flex-start; }
+            .actions { flex-direction: column; width: 100%; }
+        }
+
+        .task.low {
+            border-left: 5px solid #6c757d; /* gray */
+        }
+
+        .task.medium {
+            border-left: 5px solid #ffc107; /* yellow */
+        }
+
+        .task.high {
+            border-left: 5px solid #dc3545; /* red */
+        }
+
+    </style>
+</head>
+<body>
+<div id="app">
+    <h2><i class="fa-solid fa-list-ol"></i> {{ texts[lang].title }}</h2>
+    <label>
+        <select v-model="lang" style="margin-bottom: 1rem;">
+            <option disabled value="">{{ texts[lang].language }}</option>
+            <option value="en">🇺🇸 English</option>
+            <option value="pt">🇵🇹 Português</option>
+        </select>
+    </label>
+
+    <!-- Add Task -->
+    <div>
+        <input v-model="newTask.text" :placeholder="texts[lang].taskName" />
+        <input type="datetime-local" v-model="newTask.due" />
+        <label>
+            <select v-model="newTask.priority">
+                <option disabled :value="''">{{ texts[lang].priority }}</option>
+                <option value="low">{{ texts[lang].low }}</option>
+                <option value="medium">{{ texts[lang].medium }}</option>
+                <option value="high">{{ texts[lang].high }}</option>
+            </select>
+        </label>
+        <button class="add-task" @click="addTask"><i class="fa-regular fa-calendar-plus"></i>{{ texts[lang].addTask }}</button>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters">
+        <button
+                :class="['secondary', { active: filter === 'today' }]"
+                @click="filter = 'today'"
+                :disabled="filter === 'today'"
+        >
+            <i class="fa-regular fa-calendar-check"></i> <b>{{ texts[lang].today }}</b>
+        </button>
+
+        <button
+                :class="['secondary', { active: filter === 'all' }]"
+                @click="filter = 'all'"
+                :disabled="filter === 'all'"
+        >
+            <i class="fa-solid fa-list-check"></i> {{ texts[lang].all }}
+        </button>
+
+        <button
+                :class="['secondary', { active: filter === 'pending' }]"
+                @click="filter = 'pending'"
+                :disabled="filter === 'pending'"
+        >
+            <i class="fa-regular fa-clock"></i> {{ texts[lang].pending }}
+        </button>
+
+        <button
+                :class="['secondary', { active: filter === 'completed' }]"
+                @click="filter = 'completed'"
+                :disabled="filter === 'completed'"
+        >
+            <i class="fa-regular fa-circle-check"></i> {{ texts[lang].completed }}
+        </button>
+    </div>
+
+    <!-- Calendar View -->
+    <div class="calendar-view">
+        <h3><i class="fa-regular fa-calendar-check"></i> {{ texts[lang].tasksByDate }}</h3>
+        <div class="calendar-list">
+            <div v-for="(tasks, date) in tasksByDate" :key="date" class="calendar-date">
+                <details>
+                    <summary>{{ formatDateLabel(date) }} ({{ tasks.length }})</summary>
+                    <ul>
+                        <li v-for="task in tasks" :key="task.id">
+              <span :style="{ textDecoration: task.done ? 'line-through' : 'none' }">
+                {{ task.text }} - <small>{{ texts[lang][task.priority] }}</small>
+              </span>
+                        </li>
+                    </ul>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task List (Drag Enabled) -->
+    <div ref="taskList">
+        <div v-for="(task, index) in filteredTasks" :key="task.id" :class="['task', task.priority, { done: task.done }]">
+            <div class="task-header">
+                <div class="text" @click="toggleDone(index)" style="cursor:pointer;">
+                    <strong>{{ task.text }}</strong><br>
+                    <i class="fa-regular fa-calendar-check"></i> Due: {{ formatDate(task.due) }} | 🚦 Priority: {{ texts[lang][task.priority] }}
+                </div>
+                <div class="actions">
+                    <button class="edit" @click="editTask(index)">{{ texts[lang].edit }} <i class="fa-regular fa-pen-to-square"></i></button>
+                    <button class="delete" @click="removeTask(index)">{{ texts[lang].delete }} <i class="fa-regular fa-trash-can"></i></button>
+                </div>
+            </div>
+
+            <div v-if="editingIndex === index">
+                <input v-model="editTaskData.text" />
+                <input type="datetime-local" v-model="editTaskData.due" />
+                <select v-model="editTaskData.priority">
+                    <option value="low">{{ texts[lang].low }}</option>
+                    <option value="medium">{{ texts[lang].medium }}</option>
+                    <option value="high">{{ texts[lang].high }}</option>
+                </select>
+                <div class="actions">
+                    <button @click="saveEdit(index)">Save</button>
+                    <button class="delete" @click="cancelEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.0.1/js/bootstrap.min.js" integrity="sha512-EKWWs1ZcA2ZY9lbLISPz8aGR2+L7JVYqBAYTq5AXgBkSjRSuQEGqWx8R1zAX16KdXPaCjOCaKE8MCpU0wcHlHA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script>
+    const { createApp } = Vue;
+
+    createApp({
+            data() {
+            return {
+                tasks: [],
+                newTask: { text: '', due: '', priority: '' },
+                editingIndex: null,
+                editTaskData: { text: '', due: '', priority: '' },
+                filter: 'all',
+                lang: 'pt',
+                texts: {
+                    en: {
+                        title: "My To-Do List",
+                        language: "Language",
+                        addTask: "Add Task",
+                        taskName: "Task Name",
+                        due: "Due",
+                        priority: "Priority",
+                        low: "Low",
+                        medium: "Medium",
+                        high: "High",
+                        all: "All",
+                        pending: "Pending",
+                        completed: "Completed",
+                        edit: "Edit",
+                        delete: "Delete",
+                        save: "Save",
+                        cancel: "Cancel",
+                        tasksByDate: "Tasks by Date",
+                        today: "Today", // en
+                    },
+                    pt: {
+                        title: "Minha Lista de Tarefas",
+                        language: "Idioma",
+                        addTask: "Adicionar Tarefa",
+                        taskName: "Nome da Tarefa",
+                        due: "Prazo",
+                        priority: "Prioridade",
+                        low: "Baixa",
+                        medium: "Média",
+                        high: "Alta",
+                        all: "Todas",
+                        pending: "Pendentes",
+                        completed: "Concluídas",
+                        edit: "Editar",
+                        delete: "Eliminar",
+                        save: "Guardar",
+                        cancel: "Cancelar",
+                        tasksByDate: "Tarefas por Data",
+                        today: "Hoje",   // pt (in the `pt` section)
+                    }
+                }
+            };
+        },
+        computed: {
+            filteredTasks() {
+                const todayStr = new Date().toISOString().split('T')[0]; // e.g., "2025-06-28"
+
+
+                if (this.filter === 'completed') return this.tasks.filter(t => t.done);
+                if (this.filter === 'pending') return this.tasks.filter(t => !t.done);
+
+                if (this.filter === 'today') {
+                    return this.tasks.filter(t => t.due?.startsWith(todayStr));
+                }
+
+                return this.tasks;
+            },
+            tasksByDate() {
+                const map = {};
+                this.tasks.forEach(task => {
+                    const dateKey = task.due?.split('T')[0];
+                    if (dateKey) {
+                        if (!map[dateKey]) map[dateKey] = [];
+                        map[dateKey].push(task);
+                    }
+                });
+                return map;
+            }
+        },
+        mounted() {
+            const stored = localStorage.getItem('advanced-tasks');
+            if (stored) this.tasks = JSON.parse(stored);
+
+            // Init Sortable
+            new Sortable(this.$refs.taskList, {
+                animation: 150,
+                onEnd: (evt) => {
+                    const movedTask = this.filteredTasks[evt.oldIndex];
+
+                    // Move task in filtered list
+                    const item = this.filteredTasks.splice(evt.oldIndex, 1)[0];
+                    this.filteredTasks.splice(evt.newIndex, 0, item);
+
+                    // Sync main task list
+                    const reordered = [];
+                    this.filteredTasks.forEach(t => {
+                        const original = this.tasks.find(task => task.id === t.id);
+                        if (original) reordered.push(original);
+                    });
+                    this.tasks = reordered;
+
+                    // Update priority based on movement direction
+                    if (evt.newIndex < evt.oldIndex) {
+                        movedTask.priority = 'high';
+                    } else if (evt.newIndex > evt.oldIndex) {
+                        movedTask.priority = 'low';
+                    }
+
+                    this.saveToStorage();
+                }
+
+            });
+        },
+        methods: {
+            syncMainTasks() {
+                // Rebuild tasks[] from reordered filteredTasks
+                const reordered = [];
+                this.filteredTasks.forEach(t => {
+                    const match = this.tasks.find(original => original.id === t.id);
+                    if (match) reordered.push(match);
+                });
+                this.tasks = reordered;
+            },
+            updatePriorities() {
+                this.tasks.forEach((t, i) => {
+                    if (i === 0) t.priority = 'high';
+                    else if (i === this.tasks.length - 1) t.priority = 'low';
+                    else t.priority = 'medium';
+                });
+            },
+            saveToStorage() {
+                localStorage.setItem('advanced-tasks', JSON.stringify(this.tasks));
+            },
+            formatDateLabel(dateStr) {
+                const d = new Date(dateStr);
+                return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+            },
+            addTask() {
+                if (this.newTask.text.trim()) {
+                    this.tasks.push({
+                        id: Date.now() + Math.random(), // ensure unique ID
+                        text: this.newTask.text.trim(),
+                        due: this.newTask.due,
+                        priority: this.newTask.priority || 'medium',
+                        done: false
+                    });
+                    this.newTask = { text: '', due: '', priority: '' };
+                    this.saveToStorage();
+                }
+            },
+            toggleDone(index) {
+                this.tasks[index].done = !this.tasks[index].done;
+                this.saveToStorage();
+            },
+            removeTask(index) {
+                this.tasks.splice(index, 1);
+                this.saveToStorage();
+            },
+            editTask(index) {
+                this.editingIndex = index;
+                this.editTaskData = { ...this.tasks[index] };
+            },
+            saveEdit(index) {
+                if (this.editTaskData.text.trim()) {
+                    this.tasks[index] = { ...this.editTaskData, done: this.tasks[index].done };
+                    this.editingIndex = null;
+                    this.editTaskData = { text: '', due: '', priority: '' };
+                    this.saveToStorage();
+                }
+            },
+            cancelEdit() {
+                this.editingIndex = null;
+            },
+            formatDate(isoDate) {
+                if (!isoDate) return 'N/A';
+                const d = new Date(isoDate);
+                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+    }).mount('#app');
+</script>
+</body>
+</html>
